@@ -286,33 +286,54 @@ class TelegramPhotoDownloader:
                             print(f"  [{index}/{total_files}] {filename}: {milestone}% ({mb_current:.1f}/{mb_total:.1f} MB)")
                         break
 
-            try:
-                # Download with progress callback
-                await self.client.download_media(
-                    message.media,
-                    filepath,
-                    progress_callback=progress_callback
-                )
+            # Retry logic for failed downloads
+            max_retries = 3
+            retry_count = 0
+            download_success = False
 
-                # Update counters (thread-safe)
-                async with download_lock:
-                    downloaded_count += 1
-                    if file_type == 'photo':
-                        photo_count += 1
-                    elif file_type == 'video':
-                        video_count += 1
-                    elif file_type == 'document':
-                        document_count += 1
+            while retry_count < max_retries and not download_success:
+                try:
+                    if retry_count > 0:
+                        print(f"  [{index}/{total_files}] {filename}: Retry {retry_count}/{max_retries}...")
+                        # Reset shown milestones for retry
+                        shown_milestones.clear()
+                        # Wait a bit before retrying
+                        await asyncio.sleep(2)
 
-                print(f"✓ Downloaded {downloaded_count}/{total_files}: {filename}")
+                    # Download with progress callback
+                    await self.client.download_media(
+                        message.media,
+                        filepath,
+                        progress_callback=progress_callback
+                    )
 
-            except asyncio.CancelledError:
-                raise  # Re-raise to propagate cancellation
-            except Exception as e:
-                async with download_lock:
-                    downloaded_count += 1
-                    skipped_count += 1
-                print(f"✗ Failed {downloaded_count}/{total_files}: {filename} - {e}")
+                    download_success = True
+
+                    # Update counters (thread-safe)
+                    async with download_lock:
+                        downloaded_count += 1
+                        if file_type == 'photo':
+                            photo_count += 1
+                        elif file_type == 'video':
+                            video_count += 1
+                        elif file_type == 'document':
+                            document_count += 1
+
+                    print(f"✓ Downloaded {downloaded_count}/{total_files}: {filename}")
+
+                except asyncio.CancelledError:
+                    raise  # Re-raise to propagate cancellation
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        # Final failure after all retries
+                        async with download_lock:
+                            downloaded_count += 1
+                            skipped_count += 1
+                        print(f"✗ Failed {downloaded_count}/{total_files}: {filename} - {e}")
+                    else:
+                        # Will retry
+                        print(f"  [{index}/{total_files}] {filename}: Error ({e}), retrying...")
 
         # Use semaphore to maintain exactly 5 concurrent downloads
         max_concurrent = 5
