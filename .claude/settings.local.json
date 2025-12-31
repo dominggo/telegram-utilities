@@ -8,7 +8,11 @@
       "Bash(git push:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nAdd document download support with file extension filtering\n\nNew features:\n- Download documents by file extension (pdf, docx, zip, etc.)\n- Filter specific file types with --extensions parameter\n- New --media-type options: document, all\n- Files renamed with date prefix: YYYYMMDD_<original_filename>.<ext>\n- Support for downloading photos, videos, and documents in any combination\n\nExamples:\n- Download PDFs: --media-type document --extensions pdf\n- Download multiple types: --extensions pdf,docx,zip\n- Download everything: --media-type all\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git mv:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(dir:*)",
+      "Bash(git reset:*)"
     ]
   }
 }
