@@ -7,7 +7,7 @@ A Python script that acts as a Telegram client to download photos, videos, and d
 - Download photos, videos, documents, or any combination from Telegram chats/groups
 - Filter by date range (start date and end date)
 - Filter documents by file extension (e.g., PDF, DOCX, ZIP)
-- Files renamed with date prefix: `YYYYMMDD_<original_filename>.<ext>`
+- Files renamed with date+time prefix: `YYYYMMDD_HHMMSS_<original_filename>.<ext>` (prevents overwrites)
 - List all your available chats to find chat IDs
 - Automatic folder organization by chat name
 - Progress tracking and download summary
@@ -167,8 +167,8 @@ python telegram_downloader.py --chat-id username --start-date 2024-01-01 --media
 - **Session**: Authentication is saved in a session file, so you won't need to login again
 - **File Names**:
   - Photos: `YYYYMMDD_HHMMSS_msgID.jpg`
-  - Videos: `YYYYMMDD_<original_filename>.<ext>`
-  - Documents: `YYYYMMDD_<original_filename>.<ext>`
+  - Videos: `YYYYMMDD_HHMMSS_<original_filename>.<ext>`
+  - Documents: `YYYYMMDD_HHMMSS_<original_filename>.<ext>`
 - **Folders**: Media files are organized in folders named after the chat
 - **Media Types**:
   - `--media-type photo` - Photos only

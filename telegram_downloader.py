@@ -228,7 +228,7 @@ class TelegramPhotoDownloader:
                 # Check for videos
                 if 'video' in media_types and mime_type.startswith('video/'):
                     video_count += 1
-                    timestamp = message.date.strftime('%Y%m%d')
+                    timestamp = message.date.strftime('%Y%m%d_%H%M%S')
 
                     # Get file extension from mime type or filename
                     if original_filename:
@@ -275,9 +275,9 @@ class TelegramPhotoDownloader:
                         continue
 
                     document_count += 1
-                    timestamp = message.date.strftime('%Y%m%d')
+                    timestamp = message.date.strftime('%Y%m%d_%H%M%S')
 
-                    # Use original filename with date prefix
+                    # Use original filename with date+time prefix
                     filename = f"{timestamp}_{original_filename}"
                     filepath = os.path.join(chat_dir, filename)
 
