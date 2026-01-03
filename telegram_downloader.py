@@ -12,9 +12,11 @@ from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 import asyncio
 import argparse
 import re
+import socket
+from db_connection import DatabaseConnection
 
 class TelegramPhotoDownloader:
-    def __init__(self, api_id, api_hash, phone_number):
+    def __init__(self, api_id, api_hash, phone_number, db_connection=None):
         """
         Initialize the Telegram client.
 
@@ -22,10 +24,14 @@ class TelegramPhotoDownloader:
             api_id: Your Telegram API ID
             api_hash: Your Telegram API Hash
             phone_number: Your phone number for authentication
+            db_connection: Database connection instance (optional)
         """
         self.api_id = api_id
         self.api_hash = api_hash
         self.phone_number = phone_number
+        self.hostname = socket.gethostname()
+        self.db = db_connection
+
         # Use flood_sleep_threshold to handle rate limiting
         self.client = TelegramClient(
             'session_' + phone_number,
@@ -33,6 +39,104 @@ class TelegramPhotoDownloader:
             api_hash,
             flood_sleep_threshold=60  # Wait up to 60 seconds if rate limited
         )
+
+    def save_message_to_db(self, message, chat_id, chat_name, media_type, media_filename=None, media_size=None, media_mime=None):
+        """Save retrieved message to database"""
+        if not self.db:
+            return
+
+        try:
+            with self.db.get_cursor() as cursor:
+                # Get sender information
+                sender_id = message.sender_id if hasattr(message, 'sender_id') else None
+                sender_name = None
+                if hasattr(message, 'sender') and message.sender:
+                    sender_name = getattr(message.sender, 'first_name', None) or getattr(message.sender, 'title', None)
+
+                sql = """
+                INSERT INTO messages (
+                    message_id, chat_id, chat_name, sender_id, sender_name,
+                    message_date, message_text, media_type, media_file_name,
+                    media_file_size, media_mime_type, has_media, status,
+                    retrieved_datetime, notes
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON DUPLICATE KEY UPDATE
+                    retrieved_datetime = VALUES(retrieved_datetime),
+                    notes = CONCAT(COALESCE(notes, ''), ' | Re-scanned on ', VALUES(retrieved_datetime), ' from ', %s)
+                """
+
+                cursor.execute(sql, (
+                    message.id,
+                    chat_id,
+                    chat_name,
+                    sender_id,
+                    sender_name,
+                    message.date,
+                    message.text if hasattr(message, 'text') else None,
+                    media_type,
+                    media_filename,
+                    media_size,
+                    media_mime,
+                    True if media_type != 'none' else False,
+                    'retrieved',
+                    datetime.now(),
+                    f'Retrieved from {self.hostname}',
+                    self.hostname
+                ))
+        except Exception as e:
+            print(f"  Warning: Could not save message {message.id} to database: {e}")
+
+    def update_download_status(self, message_id, chat_id, status, filepath=None, file_size=None, error_msg=None):
+        """Update message download status in database"""
+        if not self.db:
+            return
+
+        try:
+            with self.db.get_cursor() as cursor:
+                # Update message status
+                sql = """
+                UPDATE messages
+                SET status = %s,
+                    local_file_path = %s,
+                    updated_at = %s,
+                    notes = CONCAT(COALESCE(notes, ''), ' | ', %s, ' on ', %s, ' from ', %s)
+                WHERE message_id = %s AND chat_id = %s
+                """
+
+                status_note = f"Download {status}" if status == 'downloaded' else f"Download failed: {error_msg}"
+
+                cursor.execute(sql, (
+                    status,
+                    filepath,
+                    datetime.now(),
+                    status_note,
+                    datetime.now(),
+                    self.hostname,
+                    message_id,
+                    chat_id
+                ))
+
+                # Log download attempt
+                log_sql = """
+                INSERT INTO download_log (
+                    message_id, chat_id, download_datetime, download_status,
+                    file_path, file_size, error_message
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """
+
+                cursor.execute(log_sql, (
+                    message_id,
+                    chat_id,
+                    datetime.now(),
+                    'success' if status == 'downloaded' else 'failed',
+                    filepath,
+                    file_size,
+                    error_msg
+                ))
+        except Exception as e:
+            print(f"  Warning: Could not update download status in database: {e}")
 
     async def download_media(self, chat_id, start_date=None, end_date=None, output_dir='downloads', media_types=['photo'], file_extensions=None, show_count=False):
         """
@@ -190,6 +294,8 @@ class TelegramPhotoDownloader:
                     'filename': filename,
                     'type': 'photo'
                 })
+                # Save to database
+                self.save_message_to_db(message, chat_id, chat_name, 'photo', filename, None, 'image/jpeg')
 
             # Check for videos and documents
             elif isinstance(message.media, MessageMediaDocument):
@@ -221,6 +327,8 @@ class TelegramPhotoDownloader:
                         'filename': filename,
                         'type': 'video'
                     })
+                    # Save to database
+                    self.save_message_to_db(message, chat_id, chat_name, 'video', filename, doc.size, mime_type)
 
                 # Check for documents
                 elif 'document' in media_types and original_filename:
@@ -239,6 +347,8 @@ class TelegramPhotoDownloader:
                         'filename': filename,
                         'type': 'document'
                     })
+                    # Save to database
+                    self.save_message_to_db(message, chat_id, chat_name, 'document', filename, doc.size, mime_type)
 
         total_files = len(messages_to_download)
         print(f"\nFound {total_files} file(s) to download from {message_scan_count} messages scanned.\n")
@@ -309,6 +419,12 @@ class TelegramPhotoDownloader:
 
                     download_success = True
 
+                    # Get file size
+                    file_size = os.path.getsize(filepath) if os.path.exists(filepath) else None
+
+                    # Update database
+                    self.update_download_status(message.id, chat_id, 'downloaded', filepath, file_size)
+
                     # Update counters (thread-safe)
                     async with download_lock:
                         downloaded_count += 1
@@ -327,6 +443,11 @@ class TelegramPhotoDownloader:
                     retry_count += 1
                     if retry_count >= max_retries:
                         # Final failure after all retries
+                        error_msg = str(e)
+
+                        # Update database with failure
+                        self.update_download_status(message.id, chat_id, 'failed', None, None, error_msg)
+
                         async with download_lock:
                             downloaded_count += 1
                             skipped_count += 1
@@ -473,8 +594,19 @@ Note: You need to create a Telegram app at https://my.telegram.org to get API_ID
         print(f"Error: API ID must be a number, got: {api_id}")
         sys.exit(1)
 
+    # Initialize database connection (optional)
+    db = None
+    try:
+        db = DatabaseConnection()
+        db.connect()
+        print("Database connection established")
+    except FileNotFoundError:
+        print("Note: my.json not found - running without database tracking")
+    except Exception as e:
+        print(f"Note: Database connection failed - running without database tracking: {e}")
+
     # Create downloader instance
-    downloader = TelegramPhotoDownloader(api_id, api_hash, phone)
+    downloader = TelegramPhotoDownloader(api_id, api_hash, phone, db_connection=db)
 
     try:
         if args.list_chats:
@@ -514,6 +646,8 @@ Note: You need to create a Telegram app at https://my.telegram.org to get API_ID
             )
     finally:
         await downloader.disconnect()
+        if db:
+            db.disconnect()
 
 
 if __name__ == '__main__':
