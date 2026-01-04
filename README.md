@@ -137,8 +137,11 @@ telegram-utilities/
 ├── my.json                              # Configuration (not tracked in git)
 ├── my.json.example                      # Configuration template
 ├── requirements.txt                     # Python dependencies
+├── PROJECT_CONTEXT.md                   # Detailed project documentation for developers/AI
 └── README.md                            # This file
 ```
+
+> **Note for Developers**: See `PROJECT_CONTEXT.md` for comprehensive project documentation, architecture details, code patterns, and development guidelines.
 
 ## Configuration
 
