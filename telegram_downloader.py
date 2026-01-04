@@ -58,13 +58,13 @@ class TelegramPhotoDownloader:
                     message_id, chat_id, chat_name, sender_id, sender_name,
                     message_date, message_text, media_type, media_file_name,
                     media_file_size, media_mime_type, has_media, status,
-                    retrieved_datetime, notes
+                    retrieved_datetime, retrieved_hostname
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 ON DUPLICATE KEY UPDATE
                     retrieved_datetime = VALUES(retrieved_datetime),
-                    notes = CONCAT(COALESCE(notes, ''), ' | Re-scanned on ', VALUES(retrieved_datetime), ' from ', %s)
+                    retrieved_hostname = VALUES(retrieved_hostname)
                 """
 
                 cursor.execute(sql, (
@@ -82,7 +82,6 @@ class TelegramPhotoDownloader:
                     True if media_type != 'none' else False,
                     'retrieved',
                     datetime.now(),
-                    f'Retrieved from {self.hostname}',
                     self.hostname
                 ))
         except Exception as e:
@@ -100,20 +99,16 @@ class TelegramPhotoDownloader:
                 UPDATE messages
                 SET status = %s,
                     local_file_path = %s,
-                    updated_at = %s,
-                    notes = CONCAT(COALESCE(notes, ''), ' | ', %s, ' on ', %s, ' from ', %s)
+                    download_hostname = %s,
+                    updated_at = %s
                 WHERE message_id = %s AND chat_id = %s
                 """
-
-                status_note = f"Download {status}" if status == 'downloaded' else f"Download failed: {error_msg}"
 
                 cursor.execute(sql, (
                     status,
                     filepath,
-                    datetime.now(),
-                    status_note,
-                    datetime.now(),
                     self.hostname,
+                    datetime.now(),
                     message_id,
                     chat_id
                 ))
@@ -122,8 +117,8 @@ class TelegramPhotoDownloader:
                 log_sql = """
                 INSERT INTO download_log (
                     message_id, chat_id, download_datetime, download_status,
-                    file_path, file_size, error_message
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    file_path, file_size, error_message, hostname
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """
 
                 cursor.execute(log_sql, (
@@ -133,7 +128,8 @@ class TelegramPhotoDownloader:
                     'success' if status == 'downloaded' else 'failed',
                     filepath,
                     file_size,
-                    error_msg
+                    error_msg,
+                    self.hostname
                 ))
         except Exception as e:
             print(f"  Warning: Could not update download status in database: {e}")

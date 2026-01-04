@@ -23,8 +23,10 @@ CREATE TABLE IF NOT EXISTS messages (
     media_duration INT,
     has_media BOOLEAN DEFAULT FALSE,
     retrieved_datetime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    retrieved_hostname VARCHAR(255),
     status ENUM('retrieved', 'downloaded', 'archived', 'deleted', 'failed') DEFAULT 'retrieved',
     local_file_path VARCHAR(1000),
+    download_hostname VARCHAR(255),
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -36,6 +38,8 @@ CREATE TABLE IF NOT EXISTS messages (
     INDEX idx_media_type (media_type),
     INDEX idx_status (status),
     INDEX idx_retrieved_datetime (retrieved_datetime),
+    INDEX idx_retrieved_hostname (retrieved_hostname),
+    INDEX idx_download_hostname (download_hostname),
 
     -- Composite indexes
     INDEX idx_chat_message (chat_id, message_id),
@@ -72,10 +76,12 @@ CREATE TABLE IF NOT EXISTS download_log (
     file_size BIGINT,
     error_message TEXT,
     retry_count INT DEFAULT 0,
+    hostname VARCHAR(255),
 
     INDEX idx_message (message_id),
     INDEX idx_download_datetime (download_datetime),
     INDEX idx_status (download_status),
+    INDEX idx_hostname (hostname),
 
     FOREIGN KEY (chat_id, message_id) REFERENCES messages(chat_id, message_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -92,9 +98,11 @@ CREATE TABLE IF NOT EXISTS action_log (
     parameters TEXT,
     result_summary TEXT,
     error_message TEXT,
+    hostname VARCHAR(255),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
     INDEX idx_action_type (action_type),
     INDEX idx_start_datetime (start_datetime),
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+    INDEX idx_hostname (hostname)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
